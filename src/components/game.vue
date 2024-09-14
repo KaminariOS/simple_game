@@ -73,7 +73,7 @@ class CanvasObject {
         if (this.velocity.y != 0) {
             this.velocity.y += G;
         }
-        let hitRadius: number;
+        let hitRadius: number = 0;
         const actualShape = this.actualShape; 
         if ('radius' in actualShape) {
             hitRadius = actualShape.radius;
@@ -113,7 +113,7 @@ export default {
       resizeCanvas();
       window.addEventListener('resize', resizeCanvas); 
 
-      if (ctx) {
+      if (ctx && canvas && canvas.value) {
         const center = { x: canvas.value.width / 2, y: canvas.value.height / 2 };
         const square = new CanvasObject(
           { radius: 60 },
@@ -128,9 +128,9 @@ export default {
         );
 
         const animate = () => {
-          if (ctx) {
+          if (ctx && canvas && canvas.value) {
             ctx.clearRect(0, 0, canvas.value.width, canvas.value.height); // Clear the canvas
-              if (canvas) {
+              if (canvas && canvas.value) {
                 square.update(canvas.value); // Update the rotation
               } 
 
