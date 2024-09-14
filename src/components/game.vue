@@ -80,10 +80,13 @@ class CanvasObject {
         } else if ('length' in actualShape) {
             hitRadius = actualShape.length / 2;
         }
+        const error = 0.00001;
         if (this.center.x <= hitRadius || this.center.x + hitRadius >= width) {
+            this.center.x = Math.max(Math.min(this.center.x, width - hitRadius - error), hitRadius + error);
             this.velocity.x = -this.velocity.x;
         }
         if (this.center.y <= hitRadius || this.center.y + hitRadius >= height) {
+            this.center.y = Math.max(Math.min(this.center.y, height - hitRadius - error), hitRadius + error);
             this.velocity.y = -this.velocity.y;
         }
     }
