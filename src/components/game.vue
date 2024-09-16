@@ -124,7 +124,7 @@ export default {
           'blue',
             0.01,
             0,
-            {x: 1, y: 1},
+            {x: 1, y: 0.1},
             [new CanvasObject({length: 30}, {x: 80, y: 80}, 'green', 0.02, 0, {x: 0.0, y: 0.0}, [
                 new CanvasObject({length: 10}, {x: 30, y: 30}, 'red', -0.04, 0, {x: 0., y: 0})
             ])]
