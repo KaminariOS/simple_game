@@ -1,17 +1,26 @@
 <template>
   <div>
+      <p>FPS: {{roundedFps}}</p>
+  </div>
+  <div>
     <canvas ref="canvas" width="400" height="400"></canvas>
   </div>
 </template>
 
 <script lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue';
+import { ref, onMounted, onUnmounted, computed } from 'vue';
 
 type Point = { x: number; y: number };
 type Velocity = { x: number; y: number };
 type Square = { length: number };
 type Circle = { radius: number };
-const G = 0.1;
+const G = 0.01;
+
+const ARROWUP = "ArrowUp"; 
+const ARROWDOWN = "ArrowDown"; 
+const ARROWLEFT = "ArrowLeft"; 
+const ARROWRIGHT = "ArrowRight"; 
+const keymaps = {"ArrowUp": 0, "ArrowDown": 0, "ArrowLeft": 0, "ArrowRight": 0};
 
 class CanvasObject {
     actualShape: Square | Circle;
@@ -21,6 +30,7 @@ class CanvasObject {
     childObjects: CanvasObject[];
     velocity: Velocity;
     spin: number;
+    root: boolean = false;
 
     constructor(
         actualShape: Square | Circle,
@@ -64,15 +74,40 @@ class CanvasObject {
         ctx.restore();
     }
 
-    updateinner(canvas: HTMLCanvasElement) {
+    updateInner(canvas: HTMLCanvasElement, timestep: number) {
         this.rotation += this.spin;
         const width = canvas.width;
         const height = canvas.height;
-        this.center.x += this.velocity.x;
-        this.center.y += this.velocity.y;
-        if (this.velocity.y != 0) {
-            this.velocity.y += G;
+
+        if (this.root) {
+            // this.velocity.y += G * timestep;
+            const speed = timestep / 100;
+            const maxSpeed = speed;
+            if (keymaps[ARROWUP]) {
+                this.velocity.y -= speed;
+                keymaps[ARROWUP] -= 1;
+            }
+            if (keymaps[ARROWDOWN]) {
+                this.velocity.y += speed;
+                keymaps[ARROWDOWN] -= 1;
+            }
+            if (keymaps[ARROWLEFT]) {
+                this.velocity.x -= speed;
+                keymaps[ARROWLEFT] -= 1;
+            }
+            if (keymaps[ARROWRIGHT]) {
+                this.velocity.x += speed;
+                keymaps[ARROWRIGHT] -= 1;
+            }
+            const x_sign = this.velocity.x > 0? 1: -1;
+            const y_sign = this.velocity.y > 0? 1: -1;
+            this.velocity.x = x_sign * Math.min(Math.abs(this.velocity.x), maxSpeed);
+            this.velocity.y = y_sign * Math.min(Math.abs(this.velocity.y), maxSpeed);
+            
         }
+
+        this.center.x += this.velocity.x * timestep;
+        this.center.y += this.velocity.y * timestep;
         let hitRadius: number = 0;
         const actualShape = this.actualShape; 
         if ('radius' in actualShape) {
@@ -80,26 +115,36 @@ class CanvasObject {
         } else if ('length' in actualShape) {
             hitRadius = actualShape.length / 2;
         }
-        const error = 0.00001;
-        if (this.center.x <= hitRadius || this.center.x + hitRadius >= width) {
-            this.center.x = Math.max(Math.min(this.center.x, width - hitRadius - error), hitRadius + error);
+        if (this.center.x < hitRadius || this.center.x + hitRadius > width) {
+            this.center.x = Math.max(Math.min(this.center.x, width - hitRadius), hitRadius);
             this.velocity.x = -this.velocity.x;
         }
-        if (this.center.y <= hitRadius || this.center.y + hitRadius >= height) {
-            this.center.y = Math.max(Math.min(this.center.y, height - hitRadius - error), hitRadius + error);
+        if (this.center.y < hitRadius || this.center.y + hitRadius > height) {
+            this.center.y = Math.max(Math.min(this.center.y, height - hitRadius), hitRadius);
             this.velocity.y = -this.velocity.y;
         }
     }
 
-    update(canvas: HTMLCanvasElement) {
-        this.updateinner(canvas);
-        this.childObjects.forEach(c => c.update(canvas));
+    update(canvas: HTMLCanvasElement, timestep: number) {
+        this.updateInner(canvas, timestep);
+        this.childObjects.forEach(c => c.update(canvas, timestep));
     }
 
 }
 
 export default {
   setup() {
+
+    const fps = ref(0);
+
+    const roundedFps = computed(() => Math.round(fps.value));
+    let framesThisSecond = 0, lastFpsUpdate = 0;
+
+    let lastFrameTimeMs = 0;
+    let delta = 0;
+    // We want to simulate 1000 ms / 60 FPS = 16.667 ms per frame every time we run update()
+    const timestep = 1000 / 60;
+
     const canvas = ref<HTMLCanvasElement | null>(null);
     const resizeCanvas = () => {
       if (canvas.value) {
@@ -111,7 +156,13 @@ export default {
     };
     let animationFrameId: number;
 
+    const handleKeydown = (event: { key: string; }) => {
+      keymaps[event.key] += 1;
+    };
+
     onMounted(() => {
+      window.addEventListener('keydown', handleKeydown);
+
       const ctx = canvas.value?.getContext('2d');
       resizeCanvas();
       window.addEventListener('resize', resizeCanvas); 
@@ -124,25 +175,39 @@ export default {
           'blue',
             0.01,
             0,
-            {x: 1, y: 0.1},
+            {x: 0.1, y: 0.000000000001},
             [new CanvasObject({length: 30}, {x: 80, y: 80}, 'green', 0.02, 0, {x: 0.0, y: 0.0}, [
                 new CanvasObject({length: 10}, {x: 30, y: 30}, 'red', -0.04, 0, {x: 0., y: 0})
             ])]
         );
+        square.root = true;
 
-        const animate = () => {
+        const animate = (timestamp: number) => {
+            delta = timestamp - lastFrameTimeMs; // get the delta time since last frame
+            lastFrameTimeMs = timestamp;
+            while (delta >= timestep) {
+              if (canvas && canvas.value) {
+                square.update(canvas.value, timestep); // Update the rotation
+              } 
+                delta -= timestep;
+            }
+            if (timestamp > lastFpsUpdate + 1000) { // update every second
+                fps.value = 0.25 * framesThisSecond + (1 - 0.25) * fps.value; // compute the new FPS
+         
+                lastFpsUpdate = timestamp;
+                framesThisSecond = 0;
+            }
+            framesThisSecond++;
+
           if (ctx && canvas && canvas.value) {
             ctx.clearRect(0, 0, canvas.value.width, canvas.value.height); // Clear the canvas
-              if (canvas && canvas.value) {
-                square.update(canvas.value); // Update the rotation
-              } 
 
             square.draw(ctx); // Draw the square
             animationFrameId = requestAnimationFrame(animate); // Request the next frame
           }
         };
 
-        animate();
+        requestAnimationFrame(animate);
       }
     });
 
@@ -151,6 +216,7 @@ export default {
     });
 
     return {
+      roundedFps,
       canvas
     };
   }
