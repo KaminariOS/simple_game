@@ -30,15 +30,16 @@ class CanvasObject {
     childObjects: CanvasObject[];
     velocity: Velocity;
     spin: number;
-    root: boolean = false;
+    player: boolean = false;
+    alive: boolean = true;
 
     constructor(
         actualShape: Square | Circle,
         center: Point,
         color: string = "white",
-        spin: number = 0.01,
+        spin: number = 0.00,
         rotation: number = 0.0,
-        velocity: Velocity = {x: 0.1, y: 0.1},
+        velocity: Velocity = {x: 0.0, y: 0.0},
         childObjects: CanvasObject[] = []
     ) {
         this.actualShape = actualShape;
@@ -79,10 +80,10 @@ class CanvasObject {
         const width = canvas.width;
         const height = canvas.height;
 
-        if (this.root) {
+        if (this.player) {
             // this.velocity.y += G * timestep;
             const speed = timestep / 100;
-            const maxSpeed = speed;
+            const maxSpeed = 2 * speed;
             if (keymaps[ARROWUP]) {
                 this.velocity.y -= speed;
                 keymaps[ARROWUP] -= 1;
@@ -108,13 +109,7 @@ class CanvasObject {
 
         this.center.x += this.velocity.x * timestep;
         this.center.y += this.velocity.y * timestep;
-        let hitRadius: number = 0;
-        const actualShape = this.actualShape; 
-        if ('radius' in actualShape) {
-            hitRadius = actualShape.radius;
-        } else if ('length' in actualShape) {
-            hitRadius = actualShape.length / 2;
-        }
+        let hitRadius: number = this.getHitRadius();
         if (this.center.x < hitRadius || this.center.x + hitRadius > width) {
             this.center.x = Math.max(Math.min(this.center.x, width - hitRadius), hitRadius);
             this.velocity.x = -this.velocity.x;
@@ -130,6 +125,35 @@ class CanvasObject {
         this.childObjects.forEach(c => c.update(canvas, timestep));
     }
 
+    getHitRadius() {
+        let hitRadius: number = 0;
+        const actualShape = this.actualShape; 
+        if ('radius' in actualShape) {
+            hitRadius = actualShape.radius;
+        } else if ('length' in actualShape) {
+            hitRadius = actualShape.length / 2;
+        }
+        return hitRadius;
+    }
+
+    setHitRadius(radius: number) {
+        const actualShape = this.actualShape; 
+        if ('radius' in actualShape) {
+            actualShape.radius = radius;
+        } else if ('length' in actualShape) {
+            // TODO: should panic
+            actualShape.length = radius;
+        }
+    }
+
+}
+
+function getRandomColor() {
+  // Generate a random integer between 0 and 16777215 (hex for #FFFFFF)
+  const randomColor = Math.floor(Math.random() * 16777215).toString(16);
+
+  // Return the color string, padded with zeros if necessary
+  return `#${randomColor.padStart(6, '0')}`;
 }
 
 export default {
@@ -169,25 +193,27 @@ export default {
 
       if (ctx && canvas && canvas.value) {
         const center = { x: canvas.value.width / 2, y: canvas.value.height / 2 };
+        const root = new CanvasObject({radius: 0}, {x: 0, y: 0});
         const square = new CanvasObject(
-          { radius: 60 },
+          { radius: 30 },
           center,
-          'blue',
+          getRandomColor(),
             0.01,
             0,
             {x: 0.1, y: 0.000000000001},
-            [new CanvasObject({length: 30}, {x: 80, y: 80}, 'green', 0.02, 0, {x: 0.0, y: 0.0}, [
-                new CanvasObject({length: 10}, {x: 30, y: 30}, 'red', -0.04, 0, {x: 0., y: 0})
+            [new CanvasObject({length: 30}, {x: 40, y: 40}, getRandomColor(), 0.02, 0, {x: 0.0, y: 0.0}, [
+                new CanvasObject({length: 10}, {x: 30, y: 30}, getRandomColor(), -0.04, 0, {x: 0., y: 0})
             ])]
         );
-        square.root = true;
+        square.player = true;
+        root.childObjects.push(square);
 
         const animate = (timestamp: number) => {
             delta = timestamp - lastFrameTimeMs; // get the delta time since last frame
             lastFrameTimeMs = timestamp;
             while (delta >= timestep) {
               if (canvas && canvas.value) {
-                square.update(canvas.value, timestep); // Update the rotation
+                root.update(canvas.value, timestep); // Update the rotation
               } 
                 delta -= timestep;
             }
@@ -199,10 +225,42 @@ export default {
             }
             framesThisSecond++;
 
+            const canvasWidth = canvas.value.width;
+            const canvasHeight = canvas.value.height;
+
+            root.childObjects.forEach(c => {
+                if (c != square) {
+                    const xDiff = c.center.x - square.center.x;
+                    const yDiff = c.center.y - square.center.y;
+                    const dis = xDiff * xDiff + yDiff * yDiff;
+                    const cr = c.getHitRadius();
+                    const sr = square.getHitRadius();
+                    const newr = Math.sqrt(cr * cr + sr * sr);
+                    const radiusSum =  + square.getHitRadius();
+                    if (radiusSum * radiusSum < dis) {
+                        if (cr > sr) {
+                            square.alive = false;
+                            // c.setHitRadius(newr);
+                        } else {
+                            c.alive = false;
+                            // square.setHitRadius(newr);
+                        }
+                    }
+                }
+            });
+            // root.childObjects = root.childObjects.filter(c => c.alive);
+
+            if (root.childObjects.length < 2) {
+                const r = 20 + Math.random() * 30;
+                const x = r + Math.random() * (canvasWidth - 2 * r);
+                const y = r + Math.random() * (canvasHeight - 2 * r);
+                root.childObjects.push(new CanvasObject({radius: r}, {x: x, y: y}, getRandomColor(), 0, 0, {x: 0.1 * Math.random(), y: 0.1 * Math.random()}));
+            }
+
           if (ctx && canvas && canvas.value) {
             ctx.clearRect(0, 0, canvas.value.width, canvas.value.height); // Clear the canvas
 
-            square.draw(ctx); // Draw the square
+            root.draw(ctx); // Draw the square
             animationFrameId = requestAnimationFrame(animate); // Request the next frame
           }
         };
