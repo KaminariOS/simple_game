@@ -1,6 +1,22 @@
 <template>
-  <div>
+  <div class="flex">
       <p>FPS: {{roundedFps}}</p>
+      <p v-if="!gameStart && !gameEnd">Press ↵ to start</p>
+      <p v-if="gameStart && !gameEnd">Eat smaller ones and get bigger, or get eaten by bigger ones</p>
+      <div v-if="gameEnd">
+        <p v-if="win">You are the biggest</p>
+        <p v-if="!win">死</p>
+      </div>
+  </div>
+  <div class="card flex flex-wrap gap-4">
+    <div class="flex-auto">
+        <label for="balls">Balls</label>
+        <InputNumber v-model="BALLs" inputId="balls" showButtons fluid />
+    </div>
+    <div class="flex-auto">
+        <label for="BaseRadius">BaseRadius</label>
+        <InputNumber v-model="BaseRadius" inputId="BaseRadius" showButtons fluid />
+    </div>
   </div>
   <div>
     <canvas ref="canvas" width="400" height="400"></canvas>
@@ -20,7 +36,8 @@ const ARROWUP = "ArrowUp";
 const ARROWDOWN = "ArrowDown"; 
 const ARROWLEFT = "ArrowLeft"; 
 const ARROWRIGHT = "ArrowRight"; 
-const keymaps = {"ArrowUp": 0, "ArrowDown": 0, "ArrowLeft": 0, "ArrowRight": 0};
+const ENTER = "Enter";
+const keymaps = {"ArrowUp": 0, "ArrowDown": 0, "ArrowLeft": 0, "ArrowRight": 0, "Enter": 0};
 
 class CanvasObject {
     actualShape: Square | Circle;
@@ -159,6 +176,12 @@ function getRandomColor() {
 export default {
   setup() {
 
+    let gameStart = ref(false);
+    let gameEnd = ref(false);
+    let win = ref(false);
+    const BALLs = ref(10);
+    const BaseRadius = ref(20);
+
     const fps = ref(0);
 
     const roundedFps = computed(() => Math.round(fps.value));
@@ -175,13 +198,19 @@ export default {
         // Set canvas width to half of the viewport width
         canvas.value.width = window.innerWidth * 0.9;
         // Set canvas height to the viewport height
-        canvas.value.height = window.innerHeight * 0.9;
+        canvas.value.height = window.innerHeight * 0.7;
       }
     };
     let animationFrameId: number;
 
     const handleKeydown = (event: { key: string; }) => {
-      keymaps[event.key] += 1;
+
+      if (event.key in keymaps) {
+          keymaps[event.key as keyof typeof keymaps] += 1;
+      }
+      if (event.key === ENTER) {
+          gameStart.value = !gameStart.value;
+      }
     };
 
     onMounted(() => {
@@ -200,7 +229,7 @@ export default {
           getRandomColor(),
             0.01,
             0,
-            {x: 0.1, y: 0.000000000001},
+            {x: 0.0, y: 0.00000000000},
             [new CanvasObject({length: 30}, {x: 40, y: 40}, getRandomColor(), 0.02, 0, {x: 0.0, y: 0.0}, [
                 new CanvasObject({length: 10}, {x: 30, y: 30}, getRandomColor(), -0.04, 0, {x: 0., y: 0})
             ])]
@@ -225,44 +254,53 @@ export default {
             }
             framesThisSecond++;
 
-            const canvasWidth = canvas.value.width;
-            const canvasHeight = canvas.value.height;
+            if (canvas && canvas.value) {
+                const canvasWidth = canvas.value.width;
+                const canvasHeight = canvas.value.height;
 
-            root.childObjects.forEach(c => {
-                if (c != square) {
-                    const xDiff = c.center.x - square.center.x;
-                    const yDiff = c.center.y - square.center.y;
-                    const dis = xDiff * xDiff + yDiff * yDiff;
-                    const cr = c.getHitRadius();
-                    const sr = square.getHitRadius();
-                    const newr = Math.sqrt(cr * cr + sr * sr);
-                    const radiusSum =  + square.getHitRadius();
-                    if (radiusSum * radiusSum < dis) {
-                        if (cr > sr) {
-                            square.alive = false;
-                            // c.setHitRadius(newr);
-                        } else {
-                            c.alive = false;
-                            // square.setHitRadius(newr);
+                root.childObjects.forEach(c => {
+                    if (!c.player) {
+                        const xDiff = c.center.x - square.center.x;
+                        const yDiff = c.center.y - square.center.y;
+                        const dis = xDiff * xDiff + yDiff * yDiff;
+                        const cr = c.getHitRadius();
+                        const sr = square.getHitRadius();
+                        const newr = Math.sqrt(cr * cr + sr * sr);
+                        const radiusSum =  + square.getHitRadius();
+                        if (radiusSum * radiusSum >= dis && gameStart.value && !gameEnd.value) {
+                            if (cr > sr) {
+                                square.alive = false;
+                                gameEnd.value = true;
+                                c.setHitRadius(newr);
+                            } else {
+                                c.alive = false;
+                                square.setHitRadius(newr);
+                                if (2 * newr >= canvasWidth || 2 * newr >= canvasHeight) {
+                                    gameEnd.value = true;
+                                    win.value = true;
+                                }
+                            }
                         }
                     }
+                });
+                root.childObjects = root.childObjects.filter(c => c.alive);
+
+                if (root.childObjects.length < BALLs.value) {
+                    const r = BaseRadius.value + Math.random() * 30;
+                    const x = r + Math.random() * (canvasWidth - 2 * r);
+                    const y = r + Math.random() * (canvasHeight - 2 * r);
+                    root.childObjects.push(new CanvasObject({radius: r}, {x: x, y: y}, getRandomColor(), 0, 0, {x: 0.1 * Math.random(), y: 0.1 * Math.random()}));
                 }
-            });
-            // root.childObjects = root.childObjects.filter(c => c.alive);
 
-            if (root.childObjects.length < 2) {
-                const r = 20 + Math.random() * 30;
-                const x = r + Math.random() * (canvasWidth - 2 * r);
-                const y = r + Math.random() * (canvasHeight - 2 * r);
-                root.childObjects.push(new CanvasObject({radius: r}, {x: x, y: y}, getRandomColor(), 0, 0, {x: 0.1 * Math.random(), y: 0.1 * Math.random()}));
+                ctx.clearRect(0, 0, canvas.value.width, canvas.value.height); // Clear the canvas
+
+                if (!win.value && gameEnd.value) {
+                    ctx.fillStyle = 'lightred';   // Set the fill color
+                    ctx.fillRect(0, 0, canvasWidth, canvasHeight)
+                }
+                root.draw(ctx); // Draw the square
+                animationFrameId = requestAnimationFrame(animate); // Request the next frame
             }
-
-          if (ctx && canvas && canvas.value) {
-            ctx.clearRect(0, 0, canvas.value.width, canvas.value.height); // Clear the canvas
-
-            root.draw(ctx); // Draw the square
-            animationFrameId = requestAnimationFrame(animate); // Request the next frame
-          }
         };
 
         requestAnimationFrame(animate);
@@ -275,7 +313,12 @@ export default {
 
     return {
       roundedFps,
-      canvas
+      canvas,
+      gameStart,
+      gameEnd,
+      win,
+      BALLs,
+      BaseRadius
     };
   }
 };
@@ -285,6 +328,10 @@ export default {
 canvas {
   border: 1px solid #000;
   background: white;
+}
+.flex {
+  display: flex;    /* Enables flexbox */
+  justify-content: space-between; /* Optional: spaces items out */
 }
 </style>
 
