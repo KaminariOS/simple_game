@@ -1,7 +1,7 @@
 <template>
   <div class="flex">
       <p>FPS: {{roundedFps}}</p>
-      <p v-if="!gameStart && !gameEnd">Press ↵ to start</p>
+      <p v-if="!gameStart && !gameEnd">Press ↵ to start; use arrow keys to move</p>
       <p v-if="gameStart && !gameEnd">Eat smaller ones and get bigger, or get eaten by bigger ones</p>
       <div v-if="gameEnd">
         <p v-if="win">You are the biggest</p>
@@ -180,7 +180,7 @@ export default {
     let gameEnd = ref(false);
     let win = ref(false);
     const BALLs = ref(10);
-    const BaseRadius = ref(20);
+    const BaseRadius = ref(10);
 
     const fps = ref(0);
 
